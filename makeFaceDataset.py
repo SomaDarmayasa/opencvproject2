@@ -17,7 +17,7 @@ while True: # selama true akan melooping dan camera akan menyala
     abuAbu = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # variabel untuk membuat gambar bg menjadi gray
     wajah = faceCascade.detectMultiScale(abuAbu, 1.3, 5) #frame ,scalefactor, minNeighboar
     
-    for(x, y , w, h) in wajah: #membuat perulangan true dengan parameter x,y titik temu dan w = width(lebar) dan h= height(tinggi) dari gambar 
+    for(x, y , w, h) in wajah: #membuat perulangan dengan parameter x,y titik temu dan w = width(lebar) dan h= height(tinggi) dari gambar 
         cv2.rectangle(frame, (x,y), (x+w,y+h),(0,255,0),2) #membuat kotak yang akan mendetect wajah 
         ambilData += 1 #mengambil 1 data gambar tiap frame
         
