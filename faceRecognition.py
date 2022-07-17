@@ -79,7 +79,7 @@ while retV:  # ini akan membuat webcam terus berjalan dan akan menangkap frame s
                         """menggunakan variabel id berdasarkan id yg 
                         direkam dan confidance untuk mempredict dari file train"""
 
-                        if (confidance <= 60):  # jika nilai confidence kurang dari 69 ,bagusnya <60
+                        if (confidance <= 70):  # jika nilai confidence kurang dari 69 ,bagusnya <60
                             # maka digunakan variable nama sesuai id yang telah dibuat
                             id = nama[id]
                         else:  # selain itu
