@@ -1,9 +1,10 @@
 import cv2
+# menghitung jarak facial landmark dengan rasio mata
 from scipy.spatial import distance as dist
 import numpy as np
-import dlib
+import dlib  # detect landmark
 import imutils
-from imutils import face_utils
+from imutils import face_utils  # mengubah koordinat(x,y) menjadi numpy
 
 # menggunakan algoritma LBPH dari library opencv
 recognition = cv2.face.LBPHFaceRecognizer_create()
@@ -19,43 +20,44 @@ dlib describes eye with 6 points.
 when you blink, the EAR value will change from 0.3 to  near 0.05
 """
 
-# if you have glasses, you should cahnge the threshold!
-Eye_AR_Thresh = 0.3
 
-# how many frames shows the blink( use it for reduce noises)
+# batas rasio ukuran mata terbuka jika dibawah 0.2 maka mata tertutup
+Eye_AR_Thresh = 0.2
+
+
+# berapa frame yang ditampilkan pada saat berkedip
 Eye_AR_Consec_frames = 3
 
-# initialize the frame counters and the total number of blinks
+
+# inisialisasi counter frame untuk menambah jumlah kedipan
 counter = 0
 total = 0
 
+#
 font = cv2.FONT_HERSHEY_COMPLEX
 id = " "  # set default id dengan string kosong
 
-
+nama = ['Tidak Diketahui', 'Soma Darmayasa', 'Krisna', 'Risma']
 # menampung nama yang akan di recognisi ke dalam suatu list array
-nama = ['Tidak Diketahui', 'Soma', 'Elon', 'Chris', 'Soma Cerah']
 
 
 def eye_aspect_ratio(eye):
-    # compute the euclidean distances between the two sets of
-    # vertical eye landmarks (x, y)-coordinates
-    A = dist.euclidean(eye[1], eye[5])
-    B = dist.euclidean(eye[2], eye[4])
+    # menghitung jarak euclidean distance diantara dua himpunan eye landmark koordinat(x,y)
+    A = dist.euclidean(eye[1], eye[5])  # horizontal
+    B = dist.euclidean(eye[2], eye[4])  # horizontal
 
-    # compute the euclidean distance between the horizontal
-    # eye landmark (x, y)-coordinates
-    C = dist.euclidean(eye[0], eye[3])
+    # menghitung jarak euclidean distance diantara dua himpunan eye landmark koordinat(x,y)
+    C = dist.euclidean(eye[0], eye[3])  # vertical
 
-    # compute the eye aspect ratio
+    # menghitung aspek rasio mata
     ear = (A+B) / (2*C)
 
     # return the eye aspect ratio
     return ear
 
 
-# initialize dlib's face detector (HOG-based) and then create
-# the facial landmark predictor
+# inisialisasi dlib face detector dengan (HOG-based)
+# membuat model facial landmark predictor
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
@@ -68,17 +70,15 @@ while True:
     if frame is None:
         break
 
-    # grab the frame from the threaded video file stream, resize
-    # it, and convert it to grayscale
-    # channels)
+    # ambil frame/gambar dari video capture, selanjutnya resize dan convert kedalam bentuk grayscale
     frame = imutils.resize(frame, width=500)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    abuabu = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # detect faces in the grayscale frame
-    rects = detector(gray, 0)
+    rects = detector(abuabu, 0)
 
     wajah = faceCascade.detectMultiScale(
-        gray, 1.2, 5, minSize=(int(weightMin), int(heightMin)))
+        abuabu, 1.2, 5, minSize=(int(weightMin), int(heightMin)))
 
     for(x, y, w, h) in wajah:
 
@@ -87,23 +87,24 @@ while True:
             (x1, y1) = (face.left(), face.top())
             (x2, y2) = (face.right(), face.bottom())
 
-            # determine the facial landmarks for the face region, then
-            # convert the facial landmark (x, y)-coordinates to a NumPy
-            # array
-            shape = predictor(gray, face)
+            # tentukan facial landmarks(x,y) untuk wilayah wajah
+            # convert facial landmark koordinat(x,y) kedalam bentuk numpy array
+            shape = predictor(abuabu, face)
             shape = face_utils.shape_to_np(shape)
 
-            # find left and right eyes and calculate the EAR
-            # left eye is 37-42th points (numpy starts from 0)
+            # mencari left dan right eyes setelah itu hitung dengan EAR
+            # left eye berisi 37-42 poin(numpy start from 0)
+            # mengubah koordinat left dan right eye menjadi numpy array
             leftEye = shape[36:42]
             rightEye = shape[42:48]
 
-            # extract the left and right eye coordinates, then use the
-            # coordinates to compute the eye aspect ratio for both eyes
+            # extract koordinat left dan right eye
+            # selanjutnya gunakan koordinat dari fungsi eye_aspect_ratio
+            # untuk menghitung rasio kedua mata baik left maupun right eye
             leftEAR = eye_aspect_ratio(leftEye)
             rightEAR = eye_aspect_ratio(rightEye)
 
-            # average the eye aspect ratio together for both eyes
+            # hitung rata2 aspek rasio keseluruhan untuk kedua mata
             EAR = (leftEAR + rightEAR) / 2
 
             # check to see if the eye aspect ratio is below the blink
@@ -111,11 +112,11 @@ while True:
             if EAR < Eye_AR_Thresh:
                 counter += 1
                 id, confidance = recognition.predict(
-                    gray[y:y+h, x:x+w])
+                    abuabu[y:y+h, x:x+w])
                 """menggunakan variabel id berdasarkan id yg 
                         direkam dan confidance untuk mempredict dari file train"""
 
-                if (confidance <= 70):  # jika nilai confidence kurang dari 69 ,bagusnya <60
+                if (confidance < 60):  # jika nilai confidence kurang dari 69 ,bagusnya <60
                     # maka digunakan variable nama sesuai id yang telah dibuat
                     id = nama[id]
                 else:  # selain itu
@@ -135,10 +136,11 @@ while True:
 
             # compute the convex hull for the left and right eye, then
             # visualize each of the eyes
+            # membuat semacam garis di area mata
             leftEyeHull = cv2.convexHull(leftEye)
             rightEyeHull = cv2.convexHull(rightEye)
-            cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 2)
-            cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 2)
+            cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
+            cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
 
             # draw the total number of blinks on the frame along with
             # the computed eye aspect ratio for the frame
@@ -146,14 +148,13 @@ while True:
                         (10, 20), font, 0.55, (0, 0, 255), 1)
             cv2.putText(frame, "EAR: {:.2f}".format(EAR),
                         (10, 50), font, 0.55, (0, 0, 255), 1)
-
             cv2.putText(frame, str(id), (x+5, y-5),
                         font, 1, (255, 255, 255), 2)
-
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     cv2.imshow("frame", frame)
     if cv2.waitKey(30) == ord('q'):
         break
+
 cam.release()
 cv2.destroyAllWindows()

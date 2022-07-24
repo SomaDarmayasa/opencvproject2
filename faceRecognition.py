@@ -1,6 +1,12 @@
-# Importing libraries
 import cv2
+# menghitung jarak facial landmark dengan rasio mata
+from scipy.spatial import distance as dist
 import numpy as np
+import dlib  # detect landmark
+import imutils
+from imutils import face_utils  # mengubah koordinat(x,y) menjadi numpy
+from datetime import datetime
+
 # menggunakan algoritma LBPH dari library opencv
 recognition = cv2.face.LBPHFaceRecognizer_create()
 # membaca file model train yang sudah dilakukan
@@ -9,100 +15,165 @@ recognition.read('train/trainer70.yml')
 faceCascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 eyeCascade = cv2.CascadeClassifier('haarcascade_eye.xml')
 
-font = cv2.FONT_HERSHEY_SIMPLEX  # font
+
+""" 
+dlib describes eye with 6 points.
+when you blink, the EAR value will change from 0.3 to  near 0.05
+"""
+
+
+# batas rasio ukuran mata terbuka jika dibawah 0.2 maka mata tertutup
+Eye_AR_Thresh = 0.2
+
+
+# berapa frame yang ditampilkan pada saat berkedip
+Eye_AR_Consec_frames = 3
+
+
+# inisialisasi counter frame untuk menambah jumlah kedipan
+counter = 0
+total = 0
+
+#
+font = cv2.FONT_HERSHEY_COMPLEX
 id = " "  # set default id dengan string kosong
 
-
+nama = ['Tidak Diketahui', 'Soma', 'Krisna', 'Risma']
 # menampung nama yang akan di recognisi ke dalam suatu list array
-nama = ['Tidak Diketahui', 'Soma', 'Elon', 'Chris', 'Soma Cerah']
 
 
-first_read = True  # set variable first read  untuk membaca mata dengan True
+# membuat definisi markattandance dengan parameter requestnya adalah nama
+def markAttendance(nama):
+    # dengan membuka file Absen.csv setelah itu diread dan diwrite dengan string r+ as f
+    with open("Absen.csv", 'r+') as f:
+        namesDatalist = f.readlines()  # memebaca baris filenya dengan fungsi readlines
+        namelist = []  # inisialisasi awal namelist dengan list kosong
+        for line in namesDatalist:  # loop line pada nameDataList
+            entry = line.split(',')  # split line dengan string koma
+            # pada namelist ditambahkan parameter request nama ke index list pertama yaitu 0
+            namelist.append(entry[0])
+        if nama not in namelist:  # jika nama tidak terdapat dalam namelist
+            now = datetime.now()  # membuat variable now yang berisi datetime
+            # ubah date time menjadi string hours,menutes, second
+            dtString = now.strftime('%H:%M:%S')
+            # tulis string nama dan  datetimestring tadi ke dalam baris file excel
+            f.writelines(f'\n{nama},{dtString}')
 
-cam = cv2.VideoCapture(0)  # membuka kamera dengan webcam bawaan laptop
-cam.set(3, 680)  # set lebar windows
-cam.set(4, 480)  # set tinggi win
 
+def eye_aspect_ratio(eye):
+    # menghitung jarak euclidean distance diantara dua himpunan eye landmark koordinat(x,y)
+    A = dist.euclidean(eye[1], eye[5])  # horizontal
+    B = dist.euclidean(eye[2], eye[4])  # horizontal
+
+    # menghitung jarak euclidean distance diantara dua himpunan eye landmark koordinat(x,y)
+    C = dist.euclidean(eye[0], eye[3])  # vertical
+
+    # menghitung aspek rasio mata
+    ear = (A+B) / (2*C)
+
+    # return the eye aspect ratio
+    return ear
+
+
+# inisialisasi dlib face detector dengan (HOG-based)
+# membuat model facial landmark predictor
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+
+cam = cv2.VideoCapture(0)
 weightMin = 0.1*cam.get(3)  # weightmin
 heightMin = 0.1*cam.get(4)  # heightmin
-retV, frame = cam.read()  # mengambil frame dari camera dan ditampilkan
 
+while True:
+    ret, frame = cam.read()
+    if frame is None:
+        break
 
-while retV:  # ini akan membuat webcam terus berjalan dan akan menangkap frame setiap perulangan while
+    # ambil frame/gambar dari video capture, selanjutnya resize dan convert kedalam bentuk grayscale
+    frame = imutils.resize(frame, width=500)
+    abuabu = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    retV, frame = cam.read()
-
-    # convert frame RGB menjadi BG gray
-    abuAbu = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    # menggunakan bilateral filter untuk menghapus kotoran gambar
-    abuAbu = cv2.bilateralFilter(abuAbu, 5, 1, 1)
+    # detect faces in the grayscale frame
+    rects = detector(abuabu, 0)
 
     wajah = faceCascade.detectMultiScale(
-        abuAbu, 1.2, 5, minSize=(int(weightMin), int(heightMin)))  # untuk mendeteksi wajah
-    if len(wajah) > 0:  # jika jumlah wajah lebih dari 0
-        for (x, y, w, h) in wajah:  # membuat perulangan true dengan parameter x,y titik temu dan w = width(lebar) dan h= height(tinggi) dari gambar
+        abuabu, 1.2, 5, minSize=(int(weightMin), int(heightMin)))
 
-            frame = cv2.rectangle(
-                frame, (x, y), (x + w, y + h), (0, 255, 0), 2)  # membuat kotak yang akan mendetect wajah
+    for(x, y, w, h) in wajah:
 
-            roi_face = abuAbu[y:y + h, x:x + w]  # face detector
-            # frame
-            roi_face_clr = frame[y:y + h, x:x + w]  # frame dngn bg RGB
+        # loop over the face detections
+        for face in rects:
+            (x1, y1) = (face.left(), face.top())
+            (x2, y2) = (face.right(), face.bottom())
 
-            # untuk deteksi mata
-            eyes = eyeCascade.detectMultiScale(
-                roi_face, 1.3, 5, minSize=(50, 50))
+            # tentukan facial landmarks(x,y) untuk wilayah wajah
+            # convert facial landmark koordinat(x,y) kedalam bentuk numpy array
+            shape = predictor(abuabu, face)
+            shape = face_utils.shape_to_np(shape)
 
-            for (ex, ey, ew, eh) in eyes:  # membuat perulangan dengan parameter ex,ey titik temu dan ew = width(lebar) dan eh= height(tinggi) dari gambar
-                cv2.rectangle(roi_face_clr, (ex, ey),
-                              (ex+ew, ey+eh), (0, 255, 0), 2)  # membuat kotak yang akan mendetect wajah
-                if len(eyes) >= 2:  # jika jumlah mata lebih dari 2
-                    if first_read:  # maka jika jumlah mata lebih dari 2 adalah true
-                        cv2.putText(frame, "Mata terdeteksi, kedipkan mata untuk pengenalan wajah", (70, 70), cv2.FONT_HERSHEY_TRIPLEX,
-                                    1, (255, 255, 0), 2)  # maka di print
-                    else:  # selain itu
-                        cv2.putText(frame, "Mata terbuka", (70, 70), cv2.FONT_HERSHEY_TRIPLEX,
-                                    1, (255, 255, 255), 2)  # maka di print
+            # mencari left dan right eyes setelah itu hitung dengan EAR
+            # left eye berisi 37-42 poin(numpy start from 0)
+            # mengubah koordinat left dan right eye menjadi numpy array
+            leftEye = shape[36:42]
+            rightEye = shape[42:48]
 
-                else:  # selain itu
-                    if first_read:  # jika first_read nya bukan True maka
-                        cv2.putText(frame, "Mata tidak terdeteksi", (70, 70), cv2.FONT_HERSHEY_TRIPLEX,
-                                    1, (255, 0, 255), 2)  # maka di print
+            # extract koordinat left dan right eye
+            # selanjutnya gunakan koordinat dari fungsi eye_aspect_ratio
+            # untuk menghitung rasio kedua mata baik left maupun right eye
+            leftEAR = eye_aspect_ratio(leftEye)
+            rightEAR = eye_aspect_ratio(rightEye)
 
-                    else:  # selain itu jika mata berkedip
-                        cv2.putText(frame, "Kedipan Mata Terdeteksi !!", (70, 70), cv2.FONT_HERSHEY_TRIPLEX,
-                                    1, (0, 0, 0), 2)  # maka di print
+            # hitung rata2 aspek rasio keseluruhan untuk kedua mata
+            EAR = (leftEAR + rightEAR) / 2
 
-                        id, confidance = recognition.predict(
-                            abuAbu[y:y+h, x:x+w])
-                        """menggunakan variabel id berdasarkan id yg 
+            # check to see if the eye aspect ratio is below the blink
+            # threshold, and if so, increment the blink frame counter
+            if EAR < Eye_AR_Thresh:
+                counter += 1
+                id, confidance = recognition.predict(
+                    abuabu[y:y+h, x:x+w])
+                """menggunakan variabel id berdasarkan id yg 
                         direkam dan confidance untuk mempredict dari file train"""
 
-                        if (confidance <= 70):  # jika nilai confidence kurang dari 69 ,bagusnya <60
-                            # maka digunakan variable nama sesuai id yang telah dibuat
-                            id = nama[id]
-                        else:  # selain itu
-                            # maka digunakan variable nama dengan index pertama adalah 0
-                            id = nama[0]
+                if (confidance < 70):  # jika nilai confidence kurang dari 60 ,bagusnya <60
+                    # maka digunakan variable nama sesuai id yang telah dibuat
+                    id = nama[id]
+                else:  # selain itu
+                    # maka digunakan variable nama dengan index pertama adalah 0
+                    id = nama[0]
 
-        # menampilkan nama sesuai id dari wajah yang terekam
-        cv2.putText(frame, str(id), (x+5, y-5), font, 1, (255, 255, 255), 2)
-        cv2.waitKey(10)
-        print("Blink Detected.....!!!!")
-    else:  # selain itu
-        cv2.putText(frame, "Tidak Terdeteksi Wajah.", (70, 70), cv2.FONT_HERSHEY_TRIPLEX,
-                    1, (0, 255, 255), 2)  # maka di print
-    cv2.imshow('Camera', frame)  # menampilkan window
-    # tekan q atau esc untuk keluar
-    # ord(ch) returns the ascii of ch
-    k = cv2.waitKey(10)
-    if k == 27 or k == ord('q'):
+            # otherwise, the eye aspect ratio is not below the blink
+            # threshold
+            else:
+                # if the eyes were closed for a sufficient number of
+                # then increment the total number of blinks
+                if counter > Eye_AR_Consec_frames:
+                    total += 1
+
+                # reset the eye frame counter
+                counter = 0
+
+            # compute the convex hull for the left and right eye, then
+            # visualize each of the eyes
+            # membuat semacam garis di area mata
+            leftEyeHull = cv2.convexHull(leftEye)
+            rightEyeHull = cv2.convexHull(rightEye)
+            cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
+            cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+
+            # draw the total number of blinks on the frame along with
+            # the computed eye aspect ratio for the frame
+            cv2.putText(frame, "Blinks: {}".format(total),
+                        (10, 20), font, 0.55, (0, 0, 255), 1)
+            cv2.putText(frame, "EAR: {:.2f}".format(EAR),
+                        (10, 50), font, 0.55, (0, 0, 255), 1)
+            cv2.putText(frame, str(id), (x+5, y-5),
+                        font, 1, (255, 255, 255), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    cv2.imshow("frame", frame)
+    if cv2.waitKey(30) == ord('q'):
         break
-    else:
-        first_read = False
-
-# release the web-cam
+markAttendance(id)
 cam.release()
-# close the window
 cv2.destroyAllWindows()
